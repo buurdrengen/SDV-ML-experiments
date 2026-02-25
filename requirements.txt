@@ -1,0 +1,14 @@
+# ---------- Core ----------
+numpy
+opencv-python
+mss
+Pillow
+
+# ---------- Input control ----------
+pyautogui
+pynput
+
+# ---------- Utilities ----------
+tqdm
+pyyaml
+matplotlib
