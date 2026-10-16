@@ -1,0 +1,10 @@
+{
+  "Name": "SDV Bridge",
+  "Author": "buurdrengen",
+  "Version": "0.1.0",
+  "Description": "Lets an RL agent drive Stardew Valley in lockstep over a localhost socket.",
+  "UniqueID": "buurdrengen.SdvBridge",
+  "EntryDll": "SdvBridge.dll",
+  "MinimumApiVersion": "4.0.0",
+  "UpdateKeys": []
+}

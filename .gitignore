@@ -221,3 +221,7 @@ __marimo__/
 
 # Claude Code personal settings
 .claude/settings.local.json
+
+# .NET build output (bridge/)
+bin/
+obj/
