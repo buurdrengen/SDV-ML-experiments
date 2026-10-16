@@ -10,18 +10,27 @@ namespace SdvBridge;
 internal sealed record Request(JsonObject Body, TaskCompletionSource<JsonObject> Reply)
 {
     public string Cmd => Body["cmd"]?.GetValue<string>() ?? "";
+
+    /// <summary>Set when the agent disconnected before the reply was ready; the game thread drops the request.</summary>
+    public volatile bool Abandoned;
 }
 
 /// <summary>Accepts one client at a time over newline-delimited JSON; requests are queued for the game thread.</summary>
 internal sealed class BridgeServer
 {
+    /// <summary>The Bridge's port, overridable with <c>SDV_BRIDGE_PORT</c>. The Python client mirrors both.</summary>
+    public const int DefaultPort = 47800;
+    public const string PortVariable = "SDV_BRIDGE_PORT";
+
+    private const int DisconnectPollMs = 100;
+
     private readonly int port;
     private readonly IMonitor monitor;
     private readonly BlockingCollection<Request> queue = new();
 
-    public BridgeServer(int port, IMonitor monitor)
+    public BridgeServer(IMonitor monitor)
     {
-        this.port = port;
+        port = int.TryParse(Environment.GetEnvironmentVariable(PortVariable), out int p) ? p : DefaultPort;
         this.monitor = monitor;
     }
 
@@ -47,25 +56,36 @@ internal sealed class BridgeServer
                 using NetworkStream stream = client.GetStream();
                 using var reader = new StreamReader(stream);
                 using var writer = new StreamWriter(stream) { AutoFlush = true, NewLine = "\n" };
-                while (reader.ReadLine() is { } line)
-                    writer.WriteLine(Handle(line).ToJsonString());
+                while (reader.ReadLine() is { } line && Handle(line, client.Client) is { } reply)
+                    writer.WriteLine(reply.ToJsonString());
             }
             catch (IOException) { }
             monitor.Log("Agent disconnected", LogLevel.Info);
         }
     }
 
-    private JsonObject Handle(string line)
+    /// <summary>Queues the request and waits for its reply; returns null if the agent disconnects meanwhile.</summary>
+    private JsonObject? Handle(string line, Socket socket)
     {
+        Request request;
         try
         {
-            var request = new Request(JsonNode.Parse(line)!.AsObject(), new(TaskCreationOptions.RunContinuationsAsynchronously));
-            queue.Add(request);
-            return request.Reply.Task.Result;
+            request = new Request(JsonNode.Parse(line)!.AsObject(), new(TaskCreationOptions.RunContinuationsAsynchronously));
         }
         catch (Exception ex)
         {
             return Error(ex.GetBaseException().Message);
         }
+
+        queue.Add(request);
+        while (!request.Reply.Task.Wait(DisconnectPollMs))
+        {
+            if (socket.Poll(0, SelectMode.SelectRead) && socket.Available == 0)
+            {
+                request.Abandoned = true;
+                return null;
+            }
+        }
+        return request.Reply.Task.Result;
     }
 }

@@ -7,12 +7,9 @@ namespace SdvBridge;
 /// <summary>Starts the socket server and takes over MonoGame's frame loop so the game only advances during a Step.</summary>
 internal sealed class ModEntry : Mod
 {
-    private const int DefaultPort = 47800;
-
     public override void Entry(IModHelper helper)
     {
-        int port = int.TryParse(Environment.GetEnvironmentVariable("SDV_BRIDGE_PORT"), out int p) ? p : DefaultPort;
-        var server = new BridgeServer(port, Monitor);
+        var server = new BridgeServer(Monitor);
         LockstepLoop.Init(server, Monitor);
 
         var harmony = new Harmony(ModManifest.UniqueID);

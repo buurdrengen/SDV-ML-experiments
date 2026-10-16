@@ -10,7 +10,7 @@ namespace SdvBridge;
 
 /// <summary>
 /// Replaces MonoGame's <c>Game.Tick</c> once an agent sends its first request. From then on the game only updates
-/// while a Step (or load) is running, always with a fixed 1/60 s timestep, so the game sees normal speed no
+/// while a Step (or reset) is running, always with a fixed 1/60 s timestep, so the game sees normal speed no
 /// matter how fast it really runs. Fast mode runs updates back to back and never draws; render mode runs one
 /// update per frame at 60 FPS and draws.
 /// </summary>
@@ -30,7 +30,9 @@ internal static class LockstepLoop
 
     private static IJob? job;
     private static Request? jobRequest;
-    private static long updates;
+    private static long totalUpdates;
+
+    public static long TotalUpdates => totalUpdates;
 
     public static void Init(BridgeServer bridgeServer, IMonitor modMonitor)
     {
@@ -75,19 +77,6 @@ internal static class LockstepLoop
         return false;
     }
 
-    public static JsonObject State()
-    {
-        var reply = new JsonObject { ["ok"] = true, ["updates"] = updates, ["time"] = Game1.timeOfDay, ["day"] = Game1.dayOfMonth };
-        if (Context.IsWorldReady)
-        {
-            Point tile = Game1.player.TilePoint;
-            reply["location"] = Game1.player.currentLocation?.NameOrUniqueName;
-            reply["x"] = tile.X;
-            reply["y"] = tile.Y;
-        }
-        return reply;
-    }
-
     private static void Engage(Game game)
     {
         engaged = true;
@@ -115,40 +104,57 @@ internal static class LockstepLoop
 
     private static void RunRenderedFrame()
     {
-        if (job is null && server.TryTake(out Request? request, 0))
-            Accept(request!);
         if (job is not null)
             UpdateOnce();
 
         doDraw(new GameTime(totalTime, Dt));
 
-        // Pace to 60 FPS ourselves rather than relying on vsync.
-        long frameTicks = Stopwatch.Frequency / 60;
-        while (Stopwatch.GetTimestamp() - frameStart < frameTicks)
-            Thread.Sleep(0);
+        // Pace to 60 FPS ourselves rather than relying on vsync. Requests are taken while waiting, so one that
+        // arrives mid-frame gets its first update in the very next frame instead of idling a frame.
+        long frameEnd = frameStart + Stopwatch.Frequency / 60;
+        for (long left; (left = frameEnd - Stopwatch.GetTimestamp()) > 0;)
+        {
+            int leftMs = (int)(left * 1000 / Stopwatch.Frequency);
+            if (job is null && leftMs > 0 && server.TryTake(out Request? request, leftMs))
+                Accept(request!);
+            else
+                Thread.Sleep(0);
+        }
         frameStart = Stopwatch.GetTimestamp();
     }
 
     private static void Accept(Request request)
     {
+        if (request.Abandoned)
+            return;
+        JsonObject body = request.Body;
         try
         {
             switch (request.Cmd)
             {
                 case "mode":
-                    fast = request.Body["fast"]?.GetValue<bool>() ?? false;
-                    request.Reply.SetResult(State());
+                    fast = body["fast"]?.GetValue<bool>() ?? false;
+                    request.Reply.SetResult(GameState.Read(totalUpdates).ToJson());
                     return;
                 case "state":
-                    request.Reply.SetResult(State());
+                    request.Reply.SetResult(GameState.Read(totalUpdates).ToJson());
                     return;
-                case "load":
-                    Start(request, new LoadJob(request.Body["save"]?.GetValue<string>() ?? throw new ArgumentException("load needs 'save'")));
+                case "reset":
+                    Start(request, new ResetJob(body["save"]?.GetValue<string>() ?? throw new ArgumentException("reset needs 'save'")));
                     return;
-                case "move":
-                    if (!Context.IsWorldReady)
-                        throw new InvalidOperationException("no save loaded");
-                    Start(request, new MoveJob(request.Body["dir"]?.GetValue<string>() ?? ""));
+                case "step":
+                    RequireEpisode();
+                    Start(request, new StepJob(Wire.Parse<StepAction>(body["action"]?.GetValue<string>(), "action"), monitor));
+                    return;
+                case "teleport":
+                    RequireEpisode();
+                    Start(request, new TeleportJob(
+                        body["location"]?.GetValue<string>() ?? throw new ArgumentException("teleport needs 'location'"),
+                        new Point(
+                            body["x"]?.GetValue<int>() ?? throw new ArgumentException("teleport needs 'x'"),
+                            body["y"]?.GetValue<int>() ?? throw new ArgumentException("teleport needs 'y'")),
+                        Wire.Parse<Direction>(body["facing"]?.GetValue<string>() ?? "down", "facing"),
+                        body["time"]?.GetValue<int>()));
                     return;
                 default:
                     throw new ArgumentException($"unknown cmd '{request.Cmd}'");
@@ -160,6 +166,14 @@ internal static class LockstepLoop
         }
     }
 
+    private static void RequireEpisode()
+    {
+        if (!Context.IsWorldReady)
+            throw new InvalidOperationException("no Episode running; send reset first");
+        if (GameState.CurrentEpisodeEnd() is { } end)
+            throw new InvalidOperationException($"the Episode is over ({Wire.Name(end)}); send reset");
+    }
+
     private static void Start(Request request, IJob newJob)
     {
         job = newJob;
@@ -168,10 +182,16 @@ internal static class LockstepLoop
 
     private static void UpdateOnce()
     {
+        if (jobRequest!.Abandoned)
+        {
+            monitor.Log($"Agent disconnected; dropping its '{jobRequest.Cmd}'", LogLevel.Warn);
+            Finish(BridgeServer.Error("abandoned"));
+            return;
+        }
         job!.BeforeUpdate();
         totalTime += Dt;
         doUpdate(new GameTime(totalTime, Dt));
-        updates++;
+        totalUpdates++;
         if (Context.IsWorldReady)
             AutoDismiss();
         if (job.AfterUpdate() is { } reply)
