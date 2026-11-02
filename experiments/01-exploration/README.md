@@ -57,3 +57,39 @@ The network has 3 conv layers over the View (4×15×15). An MLP takes a 16-wide 
 - Entropy fell from 1.79 (uniform over 6 actions) to ~0.5, and explained variance settled around 0.85–0.95 late in the run.
 
 ![PPO losses and Steps per second](images/tb-losses.png)
+
+## Replays and heatmaps
+
+### Replay
+
+`replay.py` resets to an Episode log's Starting save and plays its actions back, by default with drawing on at normal speed (60 updates per second) for recording the screen with OBS or ffmpeg. It then compares the replayed trajectory of (Location, x, y) Tiles with the logged one and reports the first Step where they differ. `--fast` skips drawing, to check many Episodes quickly.
+
+```bash
+uv run python experiments/01-exploration/replay.py runs/01-ppo-1m/episodes/episode_00200.json   # 8 min for its 5000 Steps
+uv run python experiments/01-exploration/replay.py --fast runs/01-ppo-1m/episodes/*.json
+```
+
+**Replays are deterministic, as far as we can tell.** Checked on 2026-11-02:
+
+- **Rendered:** PPO Episode 200 (5000 Steps, FarmHouse → Farm → BusStop → Town → Beach) replayed with drawing on matched its log at every Step. It took 8 minutes, since blocked moves are short.
+- **Fast:** the 71 logged Episodes (21 PPO, 50 Random baseline) replayed with `--fast`, and 70 matched. Random baseline Episode 17 diverged once, after 2349 Steps in the FarmHouse: an `up` that the log has blocked at (4, 5) went through to (4, 4). Six more replays of it matched, including two in the batch's order (Episode 16, then 17). The cause is unknown. One possibility is real keyboard or mouse input, which still reaches the game (see `bridge/README.md`), and the window was on screen at the time. So treat a replay as exact, but `replay.py` reports any divergence, and an Episode worth recording can be re-run.
+
+Two things make this work. The Bridge runs every update with a fixed 1/60 s timestep and only while a Step runs, so the game never sees wall-clock time. SDV seeds its randomness from the save, which every reset reloads from the repo's Starting save. No seed or random state needs setting through the Bridge. A replay could still diverge if an Episode log came from a different Starting save, Bridge build or game version than the replay.
+
+### Heatmap
+
+`heatmap.py` draws the Tiles visited across a run's logged Episodes into `<run>/heatmap.png`, one panel per Location (the 12 that most Episodes reached), each Tile shaded on a log scale by the share of Episodes that visited it. The panels are plain grids around the visited Tiles, not the Location's map.
+
+```bash
+uv run python experiments/01-exploration/heatmap.py runs/01-ppo-1m   # --last 10 --output ...
+```
+
+The images below come from `--output experiments/01-exploration/images/heatmap-random.png` on `runs/01-random-baseline` and `--output experiments/01-exploration/images/heatmap-ppo.png` on `runs/01-ppo-1m`.
+
+The Random baseline barely leaves the FarmHouse and the Farm, and wanders around both:
+
+![Tiles visited by the 50 Random baseline Episodes](images/heatmap-random.png)
+
+PPO's 21 logged Episodes (every 10th of the 1M-Step run) share one route out of the FarmHouse, across the top of the Farm, along the bottom of the BusStop and into Town, and spread out from there:
+
+![Tiles visited by the logged PPO Episodes](images/heatmap-ppo.png)
