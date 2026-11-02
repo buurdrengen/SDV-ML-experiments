@@ -1,49 +1,19 @@
-"""SdvEnv against Bridge replies recorded from the real game (see tests/recordings/record.py); no game needed."""
+"""SdvEnv against Bridge replies recorded from the real game; no game needed."""
 
 import copy
-import json
 import re
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from sdv_env.bridge_client import Action, Direction, GameState, Outcome, StepResult
+from recorded_bridge import RECORDING, RecordedBridge, make_env, recorded_actions
+from sdv_env.bridge_client import Direction
 from sdv_env.env import VIEW_SIZE, SdvEnv
 from sdv_env.locations import location_id
 
-RECORDING = json.loads((Path(__file__).parent / "recordings/farmhouse_to_farm.json").read_text())
 VIEW, VISITED = 0, 3  # first and last View channel
 CENTRE = 7
-
-
-class RecordedBridge:
-    """Replays the recorded Episode. Checks the env sends the recorded actions in order, unless `any_action`."""
-
-    def __init__(self, recording=RECORDING, any_action=False):
-        self.recording = recording
-        self.any_action = any_action
-        self.next_step = 0
-
-    def reset(self, save: Path) -> GameState:
-        self.next_step = 0
-        return GameState.from_reply(self.recording["reset"])
-
-    def step(self, action: Action) -> StepResult:
-        steps = self.recording["steps"]
-        recorded = steps[self.next_step % len(steps)]
-        assert self.any_action or action.value == recorded["action"], f"step {self.next_step}"
-        self.next_step += 1
-        reply = recorded["reply"]
-        return StepResult(Outcome(reply["outcome"]), reply["updates"], GameState.from_reply(reply))
-
-
-def recorded_actions(count: int) -> list[int]:
-    return [list(Action).index(Action(step["action"])) for step in RECORDING["steps"][:count]]
-
-
-def make_env(**kwargs) -> SdvEnv:
-    return SdvEnv(client=RecordedBridge(), starting_save=Path("unused"), **kwargs)
 
 
 def test_reset_observes_the_start_location_time_facing_and_only_the_start_tile_as_visited():
@@ -55,7 +25,7 @@ def test_reset_observes_the_start_location_time_facing_and_only_the_start_tile_a
     visited = obs["view"][VISITED]
     assert visited[CENTRE, CENTRE] == 1
     assert visited.sum() == 1
-    assert info == {"unique_tiles": 1, "unique_locations": 1}
+    assert info == {"tile": ("FarmHouse", 9, 9), "unique_tiles": 1, "unique_locations": 1}
 
 
 def test_new_tiles_pay_the_tile_reward_and_a_new_location_adds_the_location_bonus():
@@ -80,7 +50,7 @@ def test_info_counts_unique_tiles_and_locations_visited_this_episode():
 
     infos = [env.step(action)[4] for action in recorded_actions(15)]
 
-    assert infos[-1] == {"unique_tiles": 11, "unique_locations": 2}
+    assert infos[-1] == {"tile": ("Farm", 64, 15), "unique_tiles": 11, "unique_locations": 2}
 
 
 def visited_tiles(obs) -> set[tuple[int, int]]:

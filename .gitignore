@@ -225,3 +225,6 @@ __marimo__/
 # .NET build output (bridge/)
 bin/
 obj/
+
+# Experiment runs: TensorBoard logs, Episode logs, checkpoints
+runs/

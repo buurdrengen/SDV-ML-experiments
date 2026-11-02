@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "gymnasium>=1.4.0",
+    "tensorboard>=2.21.0",
+    "torch>=2.11.0",
 ]
 
 [dependency-groups]
@@ -20,3 +22,12 @@ packages = ["sdv_env"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+# The RTX 5060 (Blackwell) needs CUDA 12.8 builds of PyTorch.
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

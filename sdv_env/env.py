@@ -1,7 +1,7 @@
 """The Gymnasium environment for SDV: observations built from the Bridge's Game state, and the Exploration reward."""
 
 from pathlib import Path
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 import gymnasium as gym
 import numpy as np
@@ -21,6 +21,18 @@ START_TIME, END_TIME = 600, 2600
 """6:00 and 2:00 AM, as SDV writes the time of day."""
 
 STARTING_SAVE = Path(__file__).parents[1] / "experiments/01-exploration/starting-save/exploration_451834694"
+
+
+ACTIONS = tuple(Action)
+"""The action space: index i is ACTIONS[i]."""
+
+
+class Tile(NamedTuple):
+    """A Tile: (Location, x, y)."""
+
+    location: str
+    x: int
+    y: int
 
 
 class BridgeLike(Protocol):
@@ -57,7 +69,7 @@ class SdvEnv(gym.Env):
         self.tile_reward = tile_reward
         self.location_bonus = location_bonus
 
-        self.action_space = gym.spaces.Discrete(len(Action))
+        self.action_space = gym.spaces.Discrete(len(ACTIONS))
         self.observation_space = gym.spaces.Dict({
             "view": gym.spaces.Box(0, 1, VIEW_SHAPE, np.uint8),
             "location": gym.spaces.Discrete(LOCATION_COUNT),
@@ -65,7 +77,8 @@ class SdvEnv(gym.Env):
             "facing": gym.spaces.Discrete(len(Direction)),
         })
 
-        self._visited: set[tuple[str, int, int]] = set()
+        self._visited: set[Tile] = set()
+        self._tile: Tile | None = None
         self._locations: set[str] = set()
         self._steps = 0
 
@@ -79,7 +92,7 @@ class SdvEnv(gym.Env):
         return self._observe(state), self._info()
 
     def step(self, action: int):
-        result = self.client.step(list(Action)[action])
+        result = self.client.step(ACTIONS[action])
         self._steps += 1
         reward = self._visit(result.state)
         terminated = result.state.episode_end is not None
@@ -89,9 +102,9 @@ class SdvEnv(gym.Env):
     def _visit(self, state: GameState) -> float:
         """Marks the player's Tile and Location as visited and returns the Exploration reward for them."""
         reward = 0.0
-        tile = (state.location, state.x, state.y)
-        if tile not in self._visited:
-            self._visited.add(tile)
+        self._tile = Tile(state.location, state.x, state.y)
+        if self._tile not in self._visited:
+            self._visited.add(self._tile)
             reward += self.tile_reward
         if state.location not in self._locations:
             self._locations.add(state.location)
@@ -106,7 +119,7 @@ class SdvEnv(gym.Env):
                 flags = state.view[row][col]
                 for channel, flag in enumerate(VIEW_CHANNELS):
                     view[channel, row, col] = flag in flags
-                tile = (state.location, state.x - radius + col, state.y - radius + row)
+                tile = Tile(state.location, state.x - radius + col, state.y - radius + row)
                 view[len(VIEW_CHANNELS), row, col] = tile in self._visited
         return {
             "view": view,
@@ -116,7 +129,7 @@ class SdvEnv(gym.Env):
         }
 
     def _info(self) -> dict:
-        return {"unique_tiles": len(self._visited), "unique_locations": len(self._locations)}
+        return {"tile": self._tile, "unique_tiles": len(self._visited), "unique_locations": len(self._locations)}
 
 
 def normalised_time(time: int) -> float:
