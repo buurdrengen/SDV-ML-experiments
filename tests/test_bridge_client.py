@@ -1,4 +1,5 @@
 import json
+import re
 import socket
 import threading
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from sdv_env.bridge_client import (
+    DEFAULT_PORT,
     Action,
     BridgeClient,
     BridgeError,
@@ -142,3 +144,9 @@ def test_client_connects_to_the_port_in_SDV_BRIDGE_PORT_like_the_bridge(bridge_w
         client.set_fast(True)
 
     assert bridge.requests == [{"cmd": "mode", "fast": True}]
+
+
+def test_default_port_matches_the_bridge_source():
+    source = (Path(__file__).parent.parent / "bridge" / "BridgeServer.cs").read_text()
+    bridge_default = int(re.search(r"const int DefaultPort = (\d+);", source).group(1))
+    assert DEFAULT_PORT == bridge_default

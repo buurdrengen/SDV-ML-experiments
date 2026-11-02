@@ -18,7 +18,7 @@ internal sealed record Request(JsonObject Body, TaskCompletionSource<JsonObject>
 /// <summary>Accepts one client at a time over newline-delimited JSON; requests are queued for the game thread.</summary>
 internal sealed class BridgeServer
 {
-    /// <summary>The Bridge's port, overridable with <c>SDV_BRIDGE_PORT</c>. The Python client mirrors both.</summary>
+    /// <summary>The Bridge's port, overridable with <c>SDV_BRIDGE_PORT</c>. Source of truth: <c>bridge_client.DEFAULT_PORT</c> mirrors it, checked by a test.</summary>
     public const int DefaultPort = 47800;
     public const string PortVariable = "SDV_BRIDGE_PORT";
 

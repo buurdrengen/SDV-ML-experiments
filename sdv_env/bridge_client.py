@@ -11,7 +11,7 @@ from enum import StrEnum
 from pathlib import Path
 
 DEFAULT_PORT = 47800
-"""Mirrors `BridgeServer.DefaultPort`; both sides honour the `SDV_BRIDGE_PORT` environment variable."""
+"""Mirrors `BridgeServer.DefaultPort`, the source of truth (a test fails if they differ); both sides honour `SDV_BRIDGE_PORT`."""
 
 
 def bridge_port() -> int:
