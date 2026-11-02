@@ -1,0 +1,30 @@
+# PPO for Experiment 01 (train_ppo.py). Every key is required; train_ppo.py --config picks another file.
+
+# Training budget: ~1M Steps. Training runs at ~250 Steps/s (env ~450, the rest is the network on CUDA), so about 70 min.
+total_steps = 1_000_000
+seed = 1
+device = "cuda"
+
+# PPO, CleanRL's defaults apart from the rollout shape: one game instance, so longer rollouts.
+learning_rate = 2.5e-4
+anneal_lr = true
+gamma = 0.99
+gae_lambda = 0.95
+clip_coef = 0.2
+clip_vloss = true
+norm_adv = true
+ent_coef = 0.01
+vf_coef = 0.5
+max_grad_norm = 0.5
+rollout_steps = 2048
+num_minibatches = 8
+update_epochs = 4
+
+# The Episode and the Exploration reward (SdvEnv).
+step_limit = 5000
+tile_reward = 0.01
+location_bonus = 1.0
+
+# Outputs in runs/<run name>/: a network checkpoint every N updates (and at the end), the Episode log of every N-th Episode.
+checkpoint_every = 25
+episode_log_every = 10

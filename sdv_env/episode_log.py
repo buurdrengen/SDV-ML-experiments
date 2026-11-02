@@ -81,13 +81,15 @@ class ScalarWriter(Protocol):
 
 
 class EpisodeRecorder(gym.Wrapper):
-    """Writes an Episode log per Episode into `directory` and, given a `writer`, the Episode's metrics."""
+    """Writes an Episode log for every `log_every`-th Episode into `directory` (numbered by Episode, starting with
+    the first) and, given a `writer`, every Episode's metrics."""
 
-    def __init__(self, env: SdvEnv, directory: Path, writer: ScalarWriter | None = None):
+    def __init__(self, env: SdvEnv, directory: Path, writer: ScalarWriter | None = None, log_every: int = 1):
         super().__init__(env)
         self.starting_save = env.starting_save.name
         self.directory = directory
         self.writer = writer
+        self.log_every = log_every
         self.episodes = 0
         self.total_steps = 0
         self._actions: list[str] = []
@@ -115,8 +117,9 @@ class EpisodeRecorder(gym.Wrapper):
             actions=self._actions, tiles=self._tiles, reward=self._reward,
             unique_tiles=info["unique_tiles"], unique_locations=info["unique_locations"], ending=ending,
         )
-        self.directory.mkdir(parents=True, exist_ok=True)
-        (self.directory / f"episode_{self.episodes:05d}.json").write_text(json.dumps(asdict(log)) + "\n")
+        if self.episodes % self.log_every == 0:
+            self.directory.mkdir(parents=True, exist_ok=True)
+            (self.directory / f"episode_{self.episodes:05d}.json").write_text(json.dumps(asdict(log)) + "\n")
         self.episodes += 1
         if self.writer is not None:
             for tag, value in metrics(log).items():

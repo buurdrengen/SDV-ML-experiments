@@ -83,3 +83,15 @@ def test_summarise_gives_the_mean_and_sample_standard_deviation_of_each_metric()
         "episode/unique_locations": (3.0, pytest.approx(2.6457513)),
         "episode/length": (4850.0, 50.0),
     }
+
+
+def test_with_log_every_n_only_every_nth_episode_is_logged_but_every_episode_reports_metrics(tmp_path):
+    writer = FakeWriter()
+    env = EpisodeRecorder(make_env(step_limit=15), tmp_path, writer, log_every=2)
+    for _ in range(3):
+        env.reset()
+        for action in recorded_actions(15):
+            env.step(action)
+
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["episode_00000.json", "episode_00002.json"]
+    assert [step for tag, _, step in writer.scalars if tag == "episode/length"] == [15, 30, 45]
