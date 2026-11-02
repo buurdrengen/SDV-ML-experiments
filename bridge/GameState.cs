@@ -7,7 +7,7 @@ namespace SdvBridge;
 /// <summary>The Game state sent back with every reply. Location fields are null until a save is loaded.</summary>
 internal sealed record GameState(
     long TotalUpdates, int Time, int Day,
-    string? Location, int? X, int? Y, Direction? Facing,
+    string? Location, int? X, int? Y, Direction? Facing, TileFlags[][]? View,
     string? Menu, EpisodeEnd? EpisodeEnd)
 {
     /// <summary>2:00 AM, as SDV writes it in <c>Game1.timeOfDay</c>.</summary>
@@ -16,12 +16,14 @@ internal sealed record GameState(
     public static GameState Read(long totalUpdates)
     {
         if (!Context.IsWorldReady)
-            return new(totalUpdates, Game1.timeOfDay, Game1.dayOfMonth, null, null, null, null, Game1.activeClickableMenu?.GetType().Name, null);
+            return new(totalUpdates, Game1.timeOfDay, Game1.dayOfMonth, null, null, null, null, null, Game1.activeClickableMenu?.GetType().Name, null);
 
         Farmer player = Game1.player;
+        GameLocation? location = player.currentLocation;
         return new(
             totalUpdates, Game1.timeOfDay, Game1.dayOfMonth,
-            player.currentLocation?.NameOrUniqueName, player.TilePoint.X, player.TilePoint.Y, (Direction)player.FacingDirection,
+            location?.NameOrUniqueName, player.TilePoint.X, player.TilePoint.Y, (Direction)player.FacingDirection,
+            location is null ? null : SdvBridge.View.Read(location, player.TilePoint),
             Game1.activeClickableMenu?.GetType().Name,
             CurrentEpisodeEnd());
     }
@@ -47,6 +49,7 @@ internal sealed record GameState(
         ["x"] = X,
         ["y"] = Y,
         ["facing"] = Facing is { } facing ? Wire.Name(facing) : null,
+        ["view"] = View is { } view ? SdvBridge.View.ToJson(view) : null,
         ["menu"] = Menu,
         ["episode_end"] = EpisodeEnd is { } end ? Wire.Name(end) : null,
     };

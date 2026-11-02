@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "RL experiments that train agents to play Stardew Valley"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "gymnasium>=1.4.0",
+]
 
 [dependency-groups]
 dev = ["pytest>=8"]

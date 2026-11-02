@@ -148,6 +148,7 @@ internal sealed class MoveTracker
 
     public readonly int Dx, Dy;
     public readonly Point Target;
+    private readonly GameLocation startLocation;
     private int bestProgress;
     private int updates, stillUpdates;
 
@@ -155,6 +156,7 @@ internal sealed class MoveTracker
     {
         (Dx, Dy) = (dx, dy);
         Target = Game1.player.TilePoint + new Point(dx, dy);
+        startLocation = Game1.player.currentLocation;
         bestProgress = Progress(Game1.player.StandingPixel);
     }
 
@@ -162,6 +164,9 @@ internal sealed class MoveTracker
     public Outcome? Check()
     {
         updates++;
+        // A warp ends the move; Target and the pixel position belong to different Locations from here on.
+        if (Game1.player.currentLocation != startLocation)
+            return Outcome.Warped;
         Point px = Game1.player.StandingPixel;
         Point centre = Player.TileCentre(Target);
         bool reached = Dx > 0 ? px.X >= centre.X : Dx < 0 ? px.X <= centre.X : Dy > 0 ? px.Y >= centre.Y : px.Y <= centre.Y;

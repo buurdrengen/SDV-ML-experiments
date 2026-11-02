@@ -15,6 +15,7 @@ from sdv_env.bridge_client import (
     EpisodeEnd,
     GameState,
     Outcome,
+    TileFlag,
 )
 
 
@@ -85,6 +86,8 @@ def test_bridge_closing_the_connection_raises(bridge_with):
             client.request("move", dir="down")
 
 
+EMPTY_VIEW = [[0] * 15 for _ in range(15)]
+
 START = {
     "ok": True,
     "total_updates": 120,
@@ -94,6 +97,7 @@ START = {
     "x": 3,
     "y": 9,
     "facing": "down",
+    "view": EMPTY_VIEW,
     "menu": None,
     "episode_end": None,
 }
@@ -109,8 +113,22 @@ def test_reset_sends_the_absolute_save_path_and_returns_the_start_state(bridge_w
     assert bridge.requests == [{"cmd": "reset", "save": str(tmp_path / "saves" / "exploration_1")}]
     assert state == GameState(
         total_updates=120, time=600, day=1, location="FarmHouse", x=3, y=9,
-        facing=Direction.DOWN, menu=None, episode_end=None,
+        facing=Direction.DOWN, view=((TileFlag(0),) * 15,) * 15, menu=None, episode_end=None,
     )
+
+
+def test_the_view_is_decoded_into_tile_flags_by_row_then_column(bridge_with):
+    view = [row[:] for row in EMPTY_VIEW]
+    view[0][14] = 1  # top-right corner: walkable
+    view[14][0] = 2 | 4  # bottom-left corner: an exit holding an NPC
+    bridge = bridge_with(lambda req: {**START, "view": view})
+
+    with BridgeClient(port=bridge.port) as client:
+        state = client.reset(Path("save"))
+
+    assert state.view[0][14] == TileFlag.WALKABLE
+    assert state.view[14][0] == TileFlag.EXIT | TileFlag.OCCUPIED
+    assert TileFlag.WALKABLE not in state.view[7][7]
 
 
 def test_step_sends_the_action_and_returns_outcome_updates_and_new_state(bridge_with):
@@ -148,5 +166,6 @@ def test_client_connects_to_the_port_in_SDV_BRIDGE_PORT_like_the_bridge(bridge_w
 
 def test_default_port_matches_the_bridge_source():
     source = (Path(__file__).parent.parent / "bridge" / "BridgeServer.cs").read_text()
-    bridge_default = int(re.search(r"const int DefaultPort = (\d+);", source).group(1))
-    assert DEFAULT_PORT == bridge_default
+    match = re.search(r"const int DefaultPort = (\d+);", source)
+    assert match, "BridgeServer.DefaultPort not found"
+    assert DEFAULT_PORT == int(match.group(1))

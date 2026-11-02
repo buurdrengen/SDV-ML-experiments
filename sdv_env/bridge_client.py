@@ -7,7 +7,7 @@ import json
 import os
 import socket
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import IntFlag, StrEnum
 from pathlib import Path
 
 DEFAULT_PORT = 47800
@@ -51,6 +51,21 @@ class Outcome(StrEnum):
     STAYED = "stayed"
 
 
+class TileFlag(IntFlag):
+    """What a Tile in the View holds; mirrors the Bridge's `TileFlags`."""
+
+    WALKABLE = 1
+    """Inside the Location's bounds, and the player wouldn't collide with anything there."""
+    EXIT = 2
+    """Leads to another Location (a warp, a door or a farm building's door)."""
+    OCCUPIED = 4
+    """Holds an object, a piece of furniture or an NPC."""
+
+
+View = tuple[tuple[TileFlag, ...], ...]
+"""Rows top to bottom, each left to right, centred on the player's Tile."""
+
+
 class EpisodeEnd(StrEnum):
     """Why the Bridge ended the Episode."""
 
@@ -69,6 +84,7 @@ class GameState:
     x: int
     y: int
     facing: Direction
+    view: View
     menu: str | None
     episode_end: EpisodeEnd | None
 
@@ -82,6 +98,7 @@ class GameState:
             x=reply["x"],
             y=reply["y"],
             facing=Direction(reply["facing"]),
+            view=tuple(tuple(TileFlag(flags) for flags in row) for row in reply["view"]),
             menu=reply["menu"],
             episode_end=EpisodeEnd(reply["episode_end"]) if reply["episode_end"] else None,
         )

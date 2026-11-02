@@ -43,6 +43,7 @@ Newline-delimited JSON on `127.0.0.1:47800` (override with `SDV_BRIDGE_PORT`; th
 | `time`, `day` | `Game1.timeOfDay` (600 = 6:00, 2600 = 2:00 AM) and day of the month |
 | `location`, `x`, `y` | Current Location and Tile; `null` before the first `reset` |
 | `facing` | `up`, `down`, `left` or `right` |
+| `view` | The View: 15 rows (y − 7 … y + 7, top to bottom) of 15 Tiles (x − 7 … x + 7), each an OR of flags: `1` walkable (inside the Location's bounds and the player wouldn't collide there), `2` exit to another Location (a warp, a door or a farm building's door; warps on a Location's edge sit just outside its bounds), `4` holds an object, furniture or an NPC. `null` before the first `reset` |
 | `menu` | Type name of an open menu (dialogue boxes included), otherwise `null`. After a Step it is `null`, unless the Step hit its 3,600-update cap (an unskippable cutscene; the Bridge logs a warning) or ended the Episode |
 | `episode_end` | `null` while the Episode runs, otherwise `two_am` or `passed_out` |
 
@@ -50,7 +51,7 @@ Newline-delimited JSON on `127.0.0.1:47800` (override with `SDV_BRIDGE_PORT`; th
 
 `action` is one of the Discrete(6) actions:
 
-- `up`, `down`, `left`, `right`: walk one Tile. The move ends at the next Tile's centre (`moved`) or when the player stops making progress for 4 updates (`blocked`). That includes being frozen, but not a warp or fade in progress. SDV nudges the player around corners, so a `moved` Step re-centres the player on the target Tile if they fit there, otherwise on whichever Tile they ended on; `x`, `y` always report the real Tile.
+- `up`, `down`, `left`, `right`: walk one Tile. The move ends at the next Tile's centre (`moved`), when a warp changes the Location, or when the player stops making progress for 4 updates (`blocked`). That includes being frozen, but not a warp or fade in progress. SDV nudges the player around corners, so a `moved` Step re-centres the player on the target Tile if they fit there, otherwise on whichever Tile they ended on; `x`, `y` always report the real Tile.
 - `interact`: act on the Tile the player faces, like the action button (doors, NPCs, objects), then idle.
 - `noop`: idle.
 

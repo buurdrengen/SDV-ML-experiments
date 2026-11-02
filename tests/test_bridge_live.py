@@ -6,13 +6,12 @@ Skipped when no Bridge is listening. Takes control of the game window's loop and
 import dataclasses
 import random
 import socket
-from pathlib import Path
 
 import pytest
 
-from sdv_env.bridge_client import Action, BridgeClient, GameState, Outcome, bridge_port
+from sdv_env.bridge_client import Action, BridgeClient, GameState, Outcome, TileFlag, bridge_port
+from sdv_env.env import STARTING_SAVE
 
-STARTING_SAVE = Path(__file__).parents[1] / "experiments/01-exploration/starting-save/exploration_451834694"
 
 
 def bridge_is_listening() -> bool:
@@ -55,10 +54,36 @@ def test_random_steps_change_location_close_every_menu_and_reset_to_the_identica
 def test_interacting_with_a_town_door_enters_the_building(client):
     client.reset(STARTING_SAVE)
     # Stand below Pierre's door (Town 43,56) after it opens at 9:00.
-    client.request("teleport", location="Town", x=43, y=57, facing="up", time=900)
+    below_door = GameState.from_reply(client.request("teleport", location="Town", x=43, y=57, facing="up", time=900))
+    assert TileFlag.EXIT in below_door.view[6][7]
 
     result = client.step(Action.INTERACT)
 
     assert result.outcome is Outcome.WARPED
     assert result.state.location == "SeedShop"
     assert result.state.menu is None
+
+
+def test_walking_out_of_the_farmhouse_lands_below_its_door_and_interacting_with_the_door_goes_back(client):
+    client.reset(STARTING_SAVE)
+    for action in [Action.LEFT] * 6 + [Action.DOWN] * 2:
+        client.step(action)
+
+    out = client.step(Action.DOWN)
+    assert out.outcome is Outcome.WARPED
+    assert out.state.location == "Farm"
+    # The Farm-side door is the exit Tile right above the player.
+    assert TileFlag.EXIT in out.state.view[6][7]
+
+    assert client.step(Action.UP).outcome is Outcome.BLOCKED
+    back = client.step(Action.INTERACT)
+    assert back.outcome is Outcome.WARPED
+    assert back.state.location == "FarmHouse"
+
+
+def test_the_live_env_passes_gymnasiums_env_checker(client):
+    from gymnasium.utils.env_checker import check_env
+
+    from sdv_env.env import SdvEnv
+
+    check_env(SdvEnv(client=client, starting_save=STARTING_SAVE), skip_render_check=True)
